@@ -9,12 +9,12 @@ The validation process goes like this:
 
   1. The test author writes:
      * a metadata file;
-     * a binary CTF stream file; and
-     * a validation file containing the expected values of this stream
-       (an array of packet objects; see below).
-  2. The CTF reader under test is called to read this binary stream
-     file with the appropriate arguments to output the format described
-     here.
+     * one or more CTF binary stream files; and
+     * a validation file containing the expected values of this trace
+       (an array of packet info and event objects; see below).
+  2. The CTF reader under test is called to read those binary stream
+     files, with the appropriate arguments to output the format
+     specified here.
   3. The CTF reader output is compared to the validation file written
      by the test author, and warnings/errors are reported if there's
      any.
@@ -30,7 +30,7 @@ parse by the CTF test suite.
 
 The following objects are defined by this document:
 
-  * Packet
+  * Packet info
   * Event
   * Integer field
   * Floating point number field
@@ -40,44 +40,46 @@ The following objects are defined by this document:
   * Sequence field
   * Structure field
 
-As you can see, there is no _trace_ object. This is because the
-intention of the validation format is to validate at the packet level,
-not at the trace (multiple streams to be merged) level.
+A _validation file_ is a JSON array of packet info and event objects.
+A packet info object inserted in a validation file's array sets the
+current packet information of the following event objects.
+
+The event objects must be inserted _in order of timestamp_, with
+appropriate clock offsets applied; this ensures a complete trace
+validation. If two events occur at the exact same timestamp, the order
+between them is not important.
 
 
 Objects
 -------
 
-This section defines the schema of all the JSON objects listed above.
+This section defines the schemas of all the JSON objects listed above.
 
 
-### Packet
+### Packet info
 
-Packet objects contain their header, context, and a list of event
-objects. A packet object honors this schema:
+Packet info objects set the current packet information of the following
+event objects within a validation file.
+
+A packet info object honors this schema:
 
 ```javascript
 {
-    "header": /* packet header field object... */,
-    "context": /* packet context field object... */,
-    "events": [
-        // zero or more event objects...
-    ]
+    "packet-header": /* packet header field object... */,
+    "packet-context": /* packet context field object... */,
 }
 ```
 
-The values of the `header` and `context` properties must be field
-objects. They may be absent if the packet doesn't have any header or
-context.
-
-Any of the `header`, `context`, and `events` properties may be set to
-`null` to skip its validation.
+Any property of a packet info object must be a field object, or may be
+absent if the packet doesn't have any such property. The packet info
+object properties may also be set to `null` to skip their validation.
 
 
 ### Event
 
 Event objects contain their header, stream event context, context, and
-payload. An event object honors this schema:
+payload. They also contain their containing packet header and context.
+An event object honors this schema:
 
 ```javascript
 {
@@ -88,12 +90,9 @@ payload. An event object honors this schema:
 }
 ```
 
-The values of the `header`, `stream-context`, `context`, and `payload`
-properties must be field objects. They may be absent if the event
-doesn't have any header, stream event context, context, or payload.
-
-Any of the `header`, `stream-context`, `context`, and `payload`
-properties may be set to `null` to skip its validation.
+Any property of an event object must be a field object, or may be
+absent if the event doesn't have any such property. The event object
+properties may also be set to `null` to skip their validation.
 
 
 ### Integer field
@@ -290,160 +289,160 @@ selected field directly instead.
 Example
 -------
 
-Here's a complete example (one packet with two events):
+Here's a complete example:
 
 ```javascript
-{
-    "header": {
-        "type": "struct",
-        "fields": [
-            {
-                "name": "magic",
-                "value": 3254525889
-            },
-            {
-                "name": "uuid",
-                "value": [
-                     83, 38, 114, 26,
-                     229, 211, 136, 54,
-                     112, 4, 5, 113,
-                     98, 252, 51, 215
-                ]
-            },
-            {
-                "name": "stream_id",
-                "value": 0
-            },
-        ]
-    },
-    "context": {
-        "type": "struct",
-        "fields": [
-            {
-                "name": "timestamp_begin",
-                "value": {
-                    "type": "integer",
-                    "value": "13dc095e4b3e8f00"
-                }
-            },
-            {
-                "name": "timestamp_begin",
-                "value": {
-                    "type": "integer",
-                    "value": "13dc095e7ff384d2"
-                }
-            },
-            {
-                "name": "content_size",
-                "value": 991
-            },
-            {
-                "name": "packet_size",
-                "value": 4096
-            },
-            {
-                "name": "events_discarded",
-                "value": 1
-            },
-            {
-                "name": "cpu_id",
-                "value": 0
-            }
-        ]
-    },
-    "events": [
-        {
-            "header": {
-                "type": "struct",
-                "fields": [
-                    {
-                        "name": "id",
-                        "value": 23
-                    },
-                    {
-                        "name": "timestamp",
-                        "value": 1549948754
-                    }
-                ]
-            },
-            "payload": {
-                "type": "struct",
-                "fields": [
-                    {
-                        "name": "_fd",
-                        "value": 5
-                    },
-                    {
-                        "name": "_name",
-                        "value": "my-attr"
-                    },
-                    {
-                        "name": "_value",
-                        "value": -1754
-                    },
-                    {
-                        "name": "_size",
-                        "value": null
-                    },
-                    {
-                        "name": "_flags",
-                        "value": 0
-                    },
-                ]
-            }
+[
+    {
+        "packet-header": {
+            "type": "struct",
+            "fields": [
+                {
+                    "name": "magic",
+                    "value": 3254525889
+                },
+                {
+                    "name": "uuid",
+                    "value": [
+                         83, 38, 114, 26,
+                         229, 211, 136, 54,
+                         112, 4, 5, 113,
+                         98, 252, 51, 215
+                    ]
+                },
+                {
+                    "name": "stream_id",
+                    "value": 0
+                },
+            ]
         },
-        {
-            "header": {
-                "type": "struct",
-                "fields": [
-                    {
-                        "name": "id",
-                        "value": 12
-                    },
-                    {
-                        "name": "timestamp",
-                        "value": 38149948754
+        "packet-context": {
+            "type": "struct",
+            "fields": [
+                {
+                    "name": "timestamp_begin",
+                    "value": {
+                        "type": "integer",
+                        "value": "13dc095e4b3e8f00"
                     }
-                ]
-            },
-            "payload": {
-                "type": "struct",
-                "fields": [
-                    {
-                        "name": "my_float",
-                        "value": -17.34
-                    },
-                    {
-                        "name": "ip",
-                        "value": [
-                            192, 168, 0, 102
-                        ]
-                    },
-                    {
-                        "name": "more_stuff",
-                        "value": [
-                            23, 0, [1, null, 3], "a string", -17.34
-                        ]
-                    },
-                    {
-                        "name": "msg",
-                        "value": {
-                            "type": "struct",
-                            "fields": [
-                                {
-                                    "name": "dst",
-                                    "value": 1944875
-                                },
-                                {
-                                    "name": "content",
-                                    "value": "get_apples"
-                                }
-                            ]
-                        }
+                },
+                {
+                    "name": "timestamp_begin",
+                    "value": {
+                        "type": "integer",
+                        "value": "13dc095e7ff384d2"
                     }
-                ]
-            }
+                },
+                {
+                    "name": "content_size",
+                    "value": 991
+                },
+                {
+                    "name": "packet_size",
+                    "value": 4096
+                },
+                {
+                    "name": "events_discarded",
+                    "value": 1
+                },
+                {
+                    "name": "cpu_id",
+                    "value": 0
+                }
+            ]
+        },
+    },
+    {
+        "header": {
+            "type": "struct",
+            "fields": [
+                {
+                    "name": "id",
+                    "value": 23
+                },
+                {
+                    "name": "timestamp",
+                    "value": 1549948754
+                }
+            ]
+        },
+        "payload": {
+            "type": "struct",
+            "fields": [
+                {
+                    "name": "_fd",
+                    "value": 5
+                },
+                {
+                    "name": "_name",
+                    "value": "my-attr"
+                },
+                {
+                    "name": "_value",
+                    "value": -1754
+                },
+                {
+                    "name": "_size",
+                    "value": null
+                },
+                {
+                    "name": "_flags",
+                    "value": 0
+                },
+            ]
         }
-    ]
-}
+    },
+    {
+        "header": {
+            "type": "struct",
+            "fields": [
+                {
+                    "name": "id",
+                    "value": 12
+                },
+                {
+                    "name": "timestamp",
+                    "value": 38149948754
+                }
+            ]
+        },
+        "payload": {
+            "type": "struct",
+            "fields": [
+                {
+                    "name": "my_float",
+                    "value": -17.34
+                },
+                {
+                    "name": "ip",
+                    "value": [
+                        192, 168, 0, 102
+                    ]
+                },
+                {
+                    "name": "more_stuff",
+                    "value": [
+                        23, 0, [1, null, 3], "a string", -17.34
+                    ]
+                },
+                {
+                    "name": "msg",
+                    "value": {
+                        "type": "struct",
+                        "fields": [
+                            {
+                                "name": "dst",
+                                "value": 1944875
+                            },
+                            {
+                                "name": "content",
+                                "value": "get_apples"
+                            }
+                        ]
+                    }
+                }
+            ]
+        }
+    }
+]
 ```
