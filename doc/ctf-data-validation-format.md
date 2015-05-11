@@ -122,16 +122,6 @@ number, e.g.:
 -38291
 ```
 
-If, for some reason, the integer value is too large, a string containing
-its big-endian hexadecimal representation may be used instead, e.g.:
-
-```javascript
-{
-    "type": "integer",
-    "value": "5652f4d20bf94f498cb150b153a03973"
-}
-```
-
 
 ### Floating point number field
 
@@ -264,18 +254,40 @@ A structure field object honors this schema:
 ```javascript
 {
     "type": "struct",
-    "fields": [
-        // zero or more of the following object:
-        {
-            "name": NAME,
-            "value": /* VALUE */
-        }
-    ]
+    "fields": {
+        // zero or more fields
+    }
 }
 ```
 
-where `NAME` is the field name and `VALUE` is the field value (a field
-object). `VALUE` may be set to `null` to skip a field's validation.
+Fields are properties of the `fields` JSON object, where the key
+corresponds to the field name, and its value to the field value
+(a field object), e.g.:
+
+```javascript
+{
+    "type": "struct",
+    "fields": {
+        "my_field": 23,
+        "other_field": {
+            "type": "enum",
+            "label": "STATE_INIT"
+        }
+    }
+}
+```
+
+A field's value may be set to `null` to skip a field's validation, e.g.:
+
+```javascript
+{
+    "type": "struct",
+    "fields": {
+        "my_field": 23,
+        "other_field": null
+    }
+}
+```
 
 
 ### Variant field?
@@ -296,152 +308,68 @@ Here's a complete example:
     {
         "packet-header": {
             "type": "struct",
-            "fields": [
-                {
-                    "name": "magic",
-                    "value": 3254525889
-                },
-                {
-                    "name": "uuid",
-                    "value": [
-                         83, 38, 114, 26,
-                         229, 211, 136, 54,
-                         112, 4, 5, 113,
-                         98, 252, 51, 215
-                    ]
-                },
-                {
-                    "name": "stream_id",
-                    "value": 0
-                },
-            ]
+            "fields": {
+                "magic": 3254525889,
+                "uuid": [
+                    83, 38, 114, 26, 229, 211, 136, 54,
+                    112, 4, 5, 113, 98, 252, 51, 215
+                ],
+                "stream_id": 0
+            }
         },
         "packet-context": {
             "type": "struct",
-            "fields": [
-                {
-                    "name": "timestamp_begin",
-                    "value": {
-                        "type": "integer",
-                        "value": "13dc095e4b3e8f00"
-                    }
-                },
-                {
-                    "name": "timestamp_begin",
-                    "value": {
-                        "type": "integer",
-                        "value": "13dc095e7ff384d2"
-                    }
-                },
-                {
-                    "name": "content_size",
-                    "value": 991
-                },
-                {
-                    "name": "packet_size",
-                    "value": 4096
-                },
-                {
-                    "name": "events_discarded",
-                    "value": 1
-                },
-                {
-                    "name": "cpu_id",
-                    "value": 0
-                }
-            ]
-        },
-    },
-    {
-        "header": {
-            "type": "struct",
-            "fields": [
-                {
-                    "name": "id",
-                    "value": 23
-                },
-                {
-                    "name": "timestamp",
-                    "value": 1549948754
-                }
-            ]
-        },
-        "payload": {
-            "type": "struct",
-            "fields": [
-                {
-                    "name": "_fd",
-                    "value": 5
-                },
-                {
-                    "name": "_name",
-                    "value": "my-attr"
-                },
-                {
-                    "name": "_value",
-                    "value": -1754
-                },
-                {
-                    "name": "_size",
-                    "value": null
-                },
-                {
-                    "name": "_flags",
-                    "value": 0
-                },
-            ]
+            "fields": {
+                "timestamp_begin": 1431029082190941952,
+                "timestamp_end": 1431029083075216594,
+                "content_size": 991,
+                "packet_size": 4096,
+                "events_discarded": 1,
+                "cpu_id": 2
+            }
         }
     },
     {
         "header": {
             "type": "struct",
-            "fields": [
-                {
-                    "name": "id",
-                    "value": 12
-                },
-                {
-                    "name": "timestamp",
-                    "value": 38149948754
-                }
-            ]
+            "fields": {
+                "id": 23,
+                "timestamp": 1549948754
+            }
         },
         "payload": {
             "type": "struct",
-            "fields": [
-                {
-                    "name": "my_float",
-                    "value": -17.34
-                },
-                {
-                    "name": "ip",
-                    "value": [
-                        192, 168, 0, 102
-                    ]
-                },
-                {
-                    "name": "more_stuff",
-                    "value": [
-                        23, 0, [1, null, 3], "a string", -17.34
-                    ]
-                },
-                {
-                    "name": "msg",
-                    "value": {
-                        "type": "struct",
-                        "fields": [
-                            {
-                                "name": "dst",
-                                "value": 1944875
-                            },
-                            {
-                                "name": "content",
-                                "value": "get_apples"
-                            }
-                        ]
+            "fields": {
+                "_fd": 5,
+                "_name": "my-attr",
+                "_value": -1754,
+                "_size": null,
+                "_flags": 0
+            }
+        }
+    },
+    {
+        "header": {
+            "type": "struct",
+            "fields": {
+                "id": 12,
+                "timestamp": 38149948754
+            }
+        },
+        "payload": {
+            "type": "struct",
+            "fields": {
+                "my_float": -17.34,
+                "ip": [192, 168, 0, 102],
+                "more_stuff": [23, 0, [1, null, 3], "a string", -17.34],
+                "msg": {
+                    "type": "struct",
+                    "fields": {
+                        "dst": 1944875,
+                        "content": "get_apples"
                     }
                 }
-            ]
+            }
         }
     }
 ]
