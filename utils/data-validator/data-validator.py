@@ -2,7 +2,7 @@
 #
 # The MIT License (MIT)
 #
-# Copyright (c) 2014 Philippe Proulx <eepp.ca>
+# Copyright (c) 2015 Philippe Proulx <eepp.ca>
 # Copyright (c) 2015 Philippe Proulx <pproulx@efficios.com>
 #
 # Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -23,8 +23,8 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
 
-from collections import OrderedDict
 import json
+import sys
 
 
 class Field:
@@ -101,30 +101,27 @@ class StructField(Field):
         return self._fields
 
     def _eq(self, other):
-        for s_entries, o_entries in zip(self.fields.items, other.fields.items):
-            if s_entries != o_entries:
+        if len(self.fields) != len(other.fields):
+            return False
+
+        for s_key, s_value in self.fields.items():
+            if s_key not in other.fields:
+                return False
+
+            o_value = other.fields[s_key]
+
+            if o_value != s_value:
                 return False
 
         return True
 
 
 class Event:
-    def __init__(self, packet_header, packet_context, header, stream_context,
-                 context, payload):
-        self._packet_header = packet_header
-        self._packet_context = packet_context
+    def __init__(self, header, stream_context, context, payload):
         self._header = header
         self._stream_context = stream_context
         self._context = context
         self._payload = payload
-
-    @property
-    def packet_header(self):
-        return self._packet_header
-
-    @property
-    def packet_context(self):
-        return self._packet_context
 
     @property
     def header(self):
@@ -143,20 +140,29 @@ class Event:
         return self._payload
 
     def __eq__(self, other):
-        ph_eq = (self.packet_header == other.packet_header)
-        pc_eq = (self.packet_context == other.packet_context)
         h_eq = (self.header == other.header)
         sc_eq = (self.stream_context == other.stream_context)
         c_eq = (self.context == other.context)
         p_eq = (self.payload == other.payload)
 
-        return sum([ph_eq, pc_eq, h_eq, sc_eq, c_eq, p_eq]) == 6
+        return sum([h_eq, sc_eq, c_eq, p_eq]) == 4
 
 
 class PacketInfo:
-    def __init__(self):
-        self.header = None
-        self.context = None
+    def __init__(self, header, context):
+        self._header = header
+        self._context = context
+
+    @property
+    def header(self):
+        return self._header
+
+    @property
+    def context(self):
+        return self._context
+
+    def __eq__(self, other):
+        return self.header == other.header and self.context == other.context
 
 
 def _json_integer_to_object(value):
@@ -164,23 +170,23 @@ def _json_integer_to_object(value):
 
 
 def _json_float_to_object(value):
-    pass FloatingPointNumberField(value)
+    return FloatingPointNumberField(value)
 
 
 def _json_string_to_object(string):
-    pass StringField(string)
+    return StringField(string)
 
 
 def _json_array_to_object(elements):
     element_objects = []
 
     for elem in elements:
-        element_objects = _json_field_to_object(elem)
+        element_objects.append(_json_field_to_object(elem))
 
-    pass ArraySequenceField(element_objects)
+    return ArraySequenceField(element_objects)
 
 
-def _json_null_field_to_object(null):
+def _json_null_field_to_object():
     return IgnoreField()
 
 
@@ -213,22 +219,19 @@ def _json_array_sequence_field_to_object(field):
     for elem in field['elements']:
         element_objects = _json_field_to_object(elem)
 
-    pass ArraySequenceField(element_objects)
+    return ArraySequenceField(element_objects)
 
 
 def _json_struct_field_to_object(field):
-    field_objects = OrderedDict()
+    fields = {}
 
-    for f in field['fields']:
-        name = f['name']
-        value = f['value']
-        field_objects[name] = _json_field_to_object(value)
+    for key, value in field['fields'].items():
+        fields[key] = _json_field_to_object(value)
 
-    return StructField(field_objects)
+    return StructField(fields)
 
 
 _json_value_to_object_cbs = {
-    None: _json_null_field_to_object,
     int: _json_integer_to_object,
     float: _json_float_to_object,
     str: _json_string_to_object,
@@ -250,49 +253,109 @@ _json_field_to_object_cbs = {
 
 
 def _json_field_to_object(json_field):
-    if type(json_field) is dict:
+    if json_field is None:
+        return _json_null_field_to_object()
+    elif type(json_field) is dict:
         return _json_field_to_object_cbs[json_field['type']](json_field)
+    else:
+        return _json_value_to_object_cbs[type(json_field)](json_field)
 
-    return _json_value_to_object_cbs[type(json_field)](json_field)
 
-
-def _json_event_to_object(json_event, cur_packet_info):
+def _json_thing_to_object(json_event):
     header = None
     stream_context = None
     context = None
     payload = None
 
-    if 'header' in json_event:
-        header = _json_field_to_object(json_event['header'])
+    if 'packet-header' in json_event:
+        # packet info
+        if 'packet-header' in json_event:
+            packet_header = _json_field_to_object(json_event['packet-header'])
 
-    if 'stream-context' in json_event:
-        stream_context = _json_field_to_object(json_event['stream-context'])
+        if 'packet-context' in json_event:
+            packet_context = _json_field_to_object(json_event['packet-context'])
 
-    if 'context' in json_event:
-        context = _json_field_to_object(json_event['context'])
+        return PacketInfo(packet_header, packet_context)
+    else:
+        if 'header' in json_event:
+            header = _json_field_to_object(json_event['header'])
 
-    if 'payload' in json_event:
-        payload = _json_field_to_object(json_event['payload'])
+        if 'stream-context' in json_event:
+            stream_context = _json_field_to_object(json_event['stream-context'])
 
-    ev = Event(cur_packet_info.header, cur_packet_info.context,
-               header, stream_context, context, payload)
+        if 'context' in json_event:
+            context = _json_field_to_object(json_event['context'])
 
-    return ev
+        if 'payload' in json_event:
+            payload = _json_field_to_object(json_event['payload'])
+
+        ev = Event(header, stream_context, context, payload)
+
+        return ev
 
 
 def _compare_json_data(json_expected, json_output):
     at_expected = 0
     at_output = 0
-    cur_packet_info_expected = PacketInfo()
-    cur_packet_info_output = PacketInfo()
+    cur_packet_info_expected = None
+    cur_packet_info_output = None
 
-    while at_expected < len(json_expected) and at_output < len(json_output):
-        # HERE
+    while True:
+        expected_event = None
+        output_event = None
 
+        # find next expected event
+        while at_expected < len(json_expected):
+            expected_thing = _json_thing_to_object(json_expected[at_expected])
+            at_expected += 1
+
+            if type(expected_thing) is PacketInfo:
+                cur_packet_info_expected = expected_thing
+            else:
+                expected_event = expected_thing
+                break
+
+        # find next output event
+        while at_output < len(json_output):
+            output_thing = _json_thing_to_object(json_output[at_output])
+            at_output += 1
+
+            if type(output_thing) is PacketInfo:
+                cur_packet_info_output = output_thing
+            else:
+                output_event = output_thing
+                break
+
+        if expected_event is None and output_event is not None:
+            # end of expected, remaining output
+            return False
+        elif expected_event is not None and output_event is None:
+            # end of output, remaining expected
+            return False
+        elif expected_event is None and output_event is None:
+            # end of both expected and output
+            break
+        else:
+            if cur_packet_info_expected != cur_packet_info_output:
+                return False
+
+            if expected_event != output_event:
+                return False
+
+    return True
 
 
 def _validate_files(path_expected, path_output):
+    with open(path_expected) as f:
+        json_expected = json.load(f)
+    with open(path_output) as f:
+        json_output = json.load(f)
 
+    return _compare_json_data(json_expected, json_output)
 
 
 if __name__ == '__main__':
+    if _validate_files(sys.argv[1], sys.argv[2]):
+        sys.exit(0)
+    else:
+        sys.exit(1)
